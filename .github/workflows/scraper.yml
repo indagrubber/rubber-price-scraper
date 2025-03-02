@@ -1,0 +1,34 @@
+name: Rubber Price Scraper
+
+on:
+  schedule:
+    - cron: '* * * * *' # Runs daily at midnight UTC
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9' # Or your preferred version
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Set up Google credentials
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > credentials.json
+
+      - name: Run scraper
+        run: python scraper.py
+
+      - name: Upload files to google drive
+        uses: google-github-actions/upload-to-drive@v1
+        with:
+          credentials_json: credentials.json
+          local_files: Rubber_Prices/*
+          remote_folder: Rubber_Prices
