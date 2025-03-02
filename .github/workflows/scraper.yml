@@ -2,7 +2,7 @@ name: Rubber Price Scraper
 
 on:
   schedule:
-    - cron: '* * * * *' # Runs daily at midnight UTC
+    - cron: '* * * * *'  # Run every minute for testing
 
 jobs:
   scrape:
@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9' # Or your preferred version
+          python-version: '3.9'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
