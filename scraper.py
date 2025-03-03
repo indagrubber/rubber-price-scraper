@@ -12,7 +12,7 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 # Define sheet IDs, sheet names, and corresponding categories
 SHEET_CONFIG = {
-    'Latex(60%)': {'spreadsheet_id': '1hHh1FMholQvVdxFJIY67Yvo5B-8hTfuILvr0BWhp8i4', 'category': 'Latex(60%)'},
+    'SMR20': {'spreadsheet_id': '1hHh1FMholQvVdxFJIY67Yvo5B-8hTfuILvr0BWhp8i4', 'category': 'SMR20'},
     'ISNR20': {'spreadsheet_id': '1xL9wPZGUJoCqwtNlcqZAvQLUyXuASGg_FRyr_d1wKxE', 'category': 'ISNR20'},
     'RSS4': {'spreadsheet_id': '16L7Vz7oJMiamKbg4g-LkQ64wZdXlmNEMOO24MZhC0Bs', 'category': 'RSS4'},
     'RSS5': {'spreadsheet_id': '1OU3IaW5WHPja03CPQ2VjmTmGMA-YyPLPAyAIrwKqc8g', 'category': 'RSS5'}
@@ -37,22 +37,42 @@ def scrape_rubber_prices():
         return
 
     soup = BeautifulSoup(response.content, "html.parser")
+    
+    # Fetch Table 5 for all categories except SMR20
     tables = soup.find_all("table")
-    if len(tables) < 5:
-        print("Table 5 not found on the webpage.")
+    if len(tables) < 8:  # Ensure there are at least 8 tables for SMR20
+        print("Required tables not found on the webpage.")
         return
 
-    table = tables[4]
-    rows = table.find_all("tr")
-    data = []
-    for row in rows[1:]:
+    # Process Table 5 for ISNR20, RSS4, RSS5
+    table_5 = tables[4]
+    rows_5 = table_5.find_all("tr")
+    data_5 = []
+    for row in rows_5[1:]:
         cols = row.find_all("td")
         cols = [col.text.strip() for col in cols]
-        data.append(cols)
+        data_5.append(cols)
 
-    df = pd.DataFrame(data, columns=["Category", "Price (INR)", "Price (USD)"])
-    df["Date"] = datetime.now().strftime("%Y-%m-%d")
-    update_google_sheets(df)
+    df_5 = pd.DataFrame(data_5, columns=["Category", "Price (INR)", "Price (USD)"])
+    
+    # Process Table 8 for SMR20
+    table_8 = tables[7]
+    rows_8 = table_8.find_all("tr")
+    data_8 = []
+    for row in rows_8[1:]:
+        cols = row.find_all("td")
+        cols = [col.text.strip() for col in cols]
+        data_8.append(cols)
+
+    df_8 = pd.DataFrame(data_8, columns=["Category", "Price (INR)", "Price (USD)"])
+
+    # Combine data from both tables into one DataFrame
+    df_combined = pd.concat([df_5, df_8], ignore_index=True)
+    
+    # Add a date column to the combined DataFrame
+    df_combined["Date"] = datetime.now().strftime("%Y-%m-%d")
+
+    update_google_sheets(df_combined)
 
 def update_google_sheets(df):
     service = get_sheets_service()
