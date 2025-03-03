@@ -1,5 +1,6 @@
 requests==2.31.0
 beautifulsoup4==4.12.2
-pandas==2.0.3
+pandas==1.5.3
+numpy==1.23.5
 google-api-python-client==2.93.0
 google-auth==2.23.3
