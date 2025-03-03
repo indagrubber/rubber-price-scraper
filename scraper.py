@@ -12,7 +12,6 @@ from pytz import timezone
 # Constants
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 IST = timezone('Asia/Kolkata')
-DUPLICATE_CHECK_RANGE = 10  # Check last 10 entries for duplicates
 
 SHEET_CONFIG = {
     'SMR20': {'spreadsheet_id': '1hHh1FMholQvVdxFJIY67Yvo5B-8hTfuILvr0BWhp8i4', 'category': 'SMR20'},
@@ -87,7 +86,12 @@ def scrape_rubber_prices():
 
     # Combine and add timestamp (date only)
     df_combined = pd.concat([df_primary, df_secondary], ignore_index=True)
-    df_combined["Date"] = datetime.now(IST).strftime("%d-%m-%Y")  # Date format fixed
+    
+    # Remove duplicates from combined data
+    df_combined = df_combined.drop_duplicates()
+    
+    # Add date column in dd-mm-yyyy format
+    df_combined["Date"] = datetime.now(IST).strftime("%d-%m-%Y")
     
     update_google_sheets(df_combined)
 
@@ -109,7 +113,23 @@ def update_google_sheets(df):
         try:
             headers = ["Category", "Price (INR)", "Price (USD)", "Date"]
             new_data = category_df.values.tolist()
-            current_time = datetime.now(IST).strftime("%d-%m-%Y")  # Use same date format
+
+            # Fetch all existing rows from the sheet to check for duplicates
+            existing_data_result = sheet.values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!A2:D'
+            ).execute()
+            existing_data = existing_data_result.get('values', [])
+
+            # Check if new data already exists in the sheet
+            new_data_filtered = [
+                row for row in new_data 
+                if row not in existing_data  # Append only if not already present
+            ]
+
+            if not new_data_filtered:
+                print(f"No new rows to append for {category}. Data already exists.")
+                continue
 
             # Header management
             header_range = f'{sheet_name}!A1:D1'
@@ -126,31 +146,15 @@ def update_google_sheets(df):
                     body={'values': [headers]}
                 ).execute()
 
-            # Duplicate check with improved validation
-            last_entries = sheet.values().get(
-                spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A2:D{DUPLICATE_CHECK_RANGE + 1}'
-            ).execute().get('values', [])
-
-            duplicate_found = any(
-                [str(item) for item in entry[:3]] == [str(item) for item in new_data[0][:3]]
-                for entry in last_entries
-                if len(entry) >= 3  # Check only first three columns
-            )
-
-            if duplicate_found:
-                print(f"Duplicate entry prevented for {category} at {current_time}")
-                continue
-
-            # Data append
+            # Data append (only non-duplicate rows)
             sheet.values().append(
                 spreadsheetId=spreadsheet_id,
                 range=f'{sheet_name}!A:D',
                 valueInputOption='USER_ENTERED',
                 insertDataOption='INSERT_ROWS',
-                body={'values': new_data}
+                body={'values': new_data_filtered}
             ).execute()
-            print(f"Successfully updated {category} at {current_time}")
+            print(f"Successfully updated {category} with {len(new_data_filtered)} new rows.")
 
         except Exception as e:
             print(f"Error updating {category}: {str(e)}")
