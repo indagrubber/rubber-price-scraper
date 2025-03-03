@@ -12,10 +12,10 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 # Define sheet IDs, sheet names, and corresponding categories
 SHEET_CONFIG = {
-    'Latex(60%)': {'spreadsheet_id': '1--LQjv_7DMHDOyAqTorGo3hoN5UNiIWF', 'category': 'Latex(60%)'},
-    'ISNR20': {'spreadsheet_id': '1-28VAH431gzMf6bEXLQenDkiY3gwTkfN', 'category': 'ISNR20'},
-    'RSS4': {'spreadsheet_id': '1P-vAhLs1ieD2Qbv1lZeqpTmRKAHe14wQ', 'category': 'RSS4'},
-    'RSS5': {'spreadsheet_id': '1-4AdM4au0a_-sZH0yl7i2kVpcCT1FFkh', 'category': 'RSS5'}
+    'Latex(60%)': {'spreadsheet_id': '1hHh1FMholQvVdxFJIY67Yvo5B-8hTfuILvr0BWhp8i4', 'category': 'Latex(60%)'},
+    'ISNR20': {'spreadsheet_id': '1xL9wPZGUJoCqwtNlcqZAvQLUyXuASGg_FRyr_d1wKxE', 'category': 'ISNR20'},
+    'RSS4': {'spreadsheet_id': '16L7Vz7oJMiamKbg4g-LkQ64wZdXlmNEMOO24MZhC0Bs', 'category': 'RSS4'},
+    'RSS5': {'spreadsheet_id': '1OU3IaW5WHPja03CPQ2VjmTmGMA-YyPLPAyAIrwKqc8g', 'category': 'RSS5'}
 }
 
 def get_sheets_service():
