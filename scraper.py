@@ -2,71 +2,87 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
-import os
-from google.colab import drive
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
-drive.mount('/content/drive')
+# Google Sheets setup
+SERVICE_ACCOUNT_FILE = 'credentials.json'
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-drive_folder = '/content/drive/My Drive/Rubber_Prices'
+# Define sheet IDs, sheet names, and corresponding categories
+SHEET_CONFIG = {
+    'Latex(60%)': {'spreadsheet_id': '1--LQjv_7DMHDOyAqTorGo3hoN5UNiIWF', 'category': 'Latex(60%)'},
+    'ISNR20': {'spreadsheet_id': '1-28VAH431gzMf6bEXLQenDkiY3gwTkfN', 'category': 'ISNR20'},
+    'RSS4': {'spreadsheet_id': '1P-vAhLs1ieD2Qbv1lZeqpTmRKAHe14wQ', 'category': 'RSS4'},
+    'RSS5': {'spreadsheet_id': '1-4AdM4au0a_-sZH0yl7i2kVpcCT1FFkh', 'category': 'RSS5'}
+}
 
-if not os.path.exists(drive_folder):
-    os.makedirs(drive_folder)
 
-# Function to scrape Table 5 from the website
+def get_sheets_service():
+    creds = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    service = build('sheets', 'v4', credentials=creds)
+    return service
+
 def scrape_rubber_prices():
     url = "https://rubberboard.gov.in/public"
-
-    # Fetch the webpage
     response = requests.get(url)
     if response.status_code != 200:
         print(f"Failed to fetch data. HTTP Status Code: {response.status_code}")
         return
 
-    # Parse the HTML content
     soup = BeautifulSoup(response.content, "html.parser")
-
-    # Locate Table 5 (adjust index if necessary)
     tables = soup.find_all("table")
     if len(tables) < 5:
         print("Table 5 not found on the webpage.")
         return
 
-    table = tables[4]  # Table 5 is at index 4 (zero-based indexing)
-
-    # Extract rows and columns from the table
+    table = tables[4]
     rows = table.find_all("tr")
     data = []
-    for row in rows[1:]:  # Skip header row
+    for row in rows[1:]:
         cols = row.find_all("td")
         cols = [col.text.strip() for col in cols]
         data.append(cols)
 
-    # Convert to DataFrame
     df = pd.DataFrame(data, columns=["Category", "Price (INR)", "Price (USD)"])
-
-    # Add today's date as a column
     df["Date"] = datetime.now().strftime("%Y-%m-%d")
+    update_google_sheets(df)
 
-    # Save each category to a separate Excel file in Google Drive
-    save_to_drive(df)
+def update_google_sheets(df):
+    service = get_sheets_service()
+    sheet = service.spreadsheets()
 
-# Function to save data into separate Excel files for each category in Google Drive
-def save_to_drive(df):
-    categories = df["Category"].unique()
-
-    for category in categories:
+    for sheet_name, config in SHEET_CONFIG.items():
+        spreadsheet_id = config['spreadsheet_id']
+        category = config['category']
         category_df = df[df["Category"] == category]
-        file_name = os.path.join(drive_folder, f"{category}.xlsx")
 
-        # Append data if file exists, otherwise create a new file
-        if os.path.exists(file_name):
-            existing_df = pd.read_excel(file_name)
-            updated_df = pd.concat([existing_df, category_df], ignore_index=True)
-            updated_df.to_excel(file_name, index=False)
-        else:
-            category_df.to_excel(file_name, index=False)
+        # Check if sheet exists, create if not (optional, if sheets already exist)
+        try:
+            sheet.values().get(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!A1').execute()
+        except:
+            body = {
+                'requests': [{
+                    'addSheet': {
+                        'properties': {
+                            'title': sheet_name
+                        }
+                    }
+                }]
+            }
+            sheet.batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
 
-    print(f"Data saved successfully to Google Drive folder: {drive_folder}")
+        # Clear existing data and append new data
+        clear_range = f'{sheet_name}!A2:D'
+        sheet.values().clear(spreadsheetId=spreadsheet_id, range=clear_range).execute()
 
-# Run the scraper function
-scrape_rubber_prices()
+        values = [category_df.columns.tolist()] + category_df.values.tolist()
+        body = {'values': values[1:]}
+        range_ = f'{sheet_name}!A2'
+        sheet.values().append(spreadsheetId=spreadsheet_id, range=range_, valueInputOption='USER_ENTERED', body=body).execute()
+
+    print("Data updated in Google Sheets successfully.")
+
+if __name__ == "__main__":
+    scrape_rubber_prices()
