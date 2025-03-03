@@ -40,6 +40,23 @@ def validate_price_data(price_str):
     except (ValueError, TypeError):
         return 0.0  # Return 0 for invalid data instead of None
 
+def process_price_table(table):
+    """Process any table with valid price data structure"""
+    data = []
+    for row in table.find_all("tr")[1:]:  # Skip header row
+        cols = [col.text.strip() for col in row.find_all("td")]
+        if len(cols) != 3:
+            print(f"Skipping invalid row: {cols}")
+            continue
+            
+        category = cols[0].strip()  # Ensure no leading/trailing spaces
+        inr_price = validate_price_data(cols[1])
+        usd_price = validate_price_data(cols[2])
+        
+        data.append([category, inr_price, usd_price])
+    
+    return pd.DataFrame(data, columns=["Category", "Price (INR)", "Price (USD)"])
+
 def scrape_rubber_prices():
     url = "https://rubberboard.gov.in/public"
     response = requests.get(url)
@@ -50,39 +67,19 @@ def scrape_rubber_prices():
     soup = BeautifulSoup(response.content, "html.parser")
     tables = soup.find_all("table")
     
-    # Identify valid price tables by their headers
-    target_tables = []
-    for idx, table in enumerate(tables):
-        headers = [th.text.strip() for th in table.find_all("th")]
-        if headers == ["Category", "₹", "US$"]:
-            target_tables.append((idx, table))
-
-    # Validate we found enough tables
-    if len(target_tables) < 2:
-        print(f"Found {len(target_tables)} price tables. Required: 2")
-        print(f"Table headers found: {[headers for _, headers in target_tables]}")
+    if len(tables) < 8:
+        print(f"Not enough tables found. Total tables: {len(tables)}")
         return
 
-    def process_price_table(table):
-        """Process any table with valid price data structure"""
-        data = []
-        for row in table.find_all("tr")[1:]:  # Skip header row
-            cols = [col.text.strip() for col in row.find_all("td")]
-            if len(cols) != 3:
-                print(f"Skipping invalid row: {cols}")
-                continue
-                
-            category = cols[0].strip()  # Ensure no leading/trailing spaces
-            inr_price = validate_price_data(cols[1])
-            usd_price = validate_price_data(cols[2])
-            
-            data.append([category, inr_price, usd_price])
-        
-        return pd.DataFrame(data, columns=["Category", "Price (INR)", "Price (USD)"])
+    # Process Table 5 for RSS4, RSS5, ISNR20
+    df_primary = process_price_table(tables[4])
+    print("Table 5 contents:")
+    print(df_primary)
 
-    # Process first two valid tables
-    df_primary = process_price_table(target_tables[0][1])
-    df_secondary = process_price_table(target_tables[1][1])
+    # Process Table 8 for SMR20
+    df_secondary = process_price_table(tables[7])
+    print("Table 8 contents:")
+    print(df_secondary)
 
     # Combine and add timestamp (date only)
     df_combined = pd.concat([df_primary, df_secondary], ignore_index=True)
@@ -92,6 +89,8 @@ def scrape_rubber_prices():
     
     # Add date column in dd-mm-yyyy format
     df_combined["Date"] = datetime.now(IST).strftime("%d-%m-%Y")
+    
+    print("All categories found:", df_combined['Category'].tolist())
     
     update_google_sheets(df_combined)
 
