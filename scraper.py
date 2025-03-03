@@ -73,7 +73,7 @@ def scrape_rubber_prices():
                 print(f"Skipping invalid row: {cols}")
                 continue
                 
-            category = cols[0]
+            category = cols[0].strip()  # Ensure no leading/trailing spaces
             inr_price = validate_price_data(cols[1])
             usd_price = validate_price_data(cols[2])
             
@@ -85,9 +85,9 @@ def scrape_rubber_prices():
     df_primary = process_price_table(target_tables[0][1])
     df_secondary = process_price_table(target_tables[1][1])
 
-    # Combine and add timestamp
+    # Combine and add timestamp (date only)
     df_combined = pd.concat([df_primary, df_secondary], ignore_index=True)
-    df_combined["Date"] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S%z")
+    df_combined["Date"] = datetime.now(IST).strftime("%d-%m-%Y")  # Date format fixed
     
     update_google_sheets(df_combined)
 
@@ -98,7 +98,9 @@ def update_google_sheets(df):
     for sheet_name, config in SHEET_CONFIG.items():
         spreadsheet_id = config['spreadsheet_id']
         category = config['category']
-        category_df = df[df["Category"] == category]
+        
+        # Ensure category matching is case-insensitive and trims whitespace
+        category_df = df[df["Category"].str.strip().str.upper() == category.upper()]
 
         if category_df.empty:
             print(f"No valid data found for category: {category}")
@@ -107,7 +109,7 @@ def update_google_sheets(df):
         try:
             headers = ["Category", "Price (INR)", "Price (USD)", "Date"]
             new_data = category_df.values.tolist()
-            current_time = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+            current_time = datetime.now(IST).strftime("%d-%m-%Y")  # Use same date format
 
             # Header management
             header_range = f'{sheet_name}!A1:D1'
