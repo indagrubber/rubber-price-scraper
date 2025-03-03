@@ -67,31 +67,37 @@ def update_google_sheets(df):
             print(f"No data found for category: {category}")
             continue
 
-        # Check if sheet exists, create if not (optional, if sheets already exist)
+        print(f"Processing sheet: {sheet_name}, Spreadsheet ID: {spreadsheet_id}")
+
         try:
-            sheet.values().get(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!A1').execute()
+            # Fetch existing data from the sheet
+            result = sheet.values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!A1:D'
+            ).execute()
+            existing_data = result.get('values', [])
+
+            # Prepare headers and combine new and existing data
+            headers = ["Category", "Price (INR)", "Price (USD)", "Date"]
+            new_data = category_df.values.tolist()
+
+            # Ensure headers are present
+            if not existing_data or existing_data[0] != headers:
+                combined_data = [headers] + new_data + existing_data[1:]
+            else:
+                combined_data = [existing_data[0]] + new_data + existing_data[1:]
+
+            # Write combined data back to the sheet
+            body = {'values': combined_data}
+            sheet.values().update(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!A1',
+                valueInputOption='USER_ENTERED',
+                body=body
+            ).execute()
+
         except Exception as e:
-            body = {
-                'requests': [{
-                    'addSheet': {
-                        'properties': {
-                            'title': sheet_name
-                        }
-                    }
-                }]
-            }
-            sheet.batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
-
-        # Clear existing data and append new data
-        clear_range = f'{sheet_name}!A2:D'
-        sheet.values().clear(spreadsheetId=spreadsheet_id, range=clear_range).execute()
-
-        values = [category_df.columns.tolist()] + category_df.values.tolist()
-        body = {'values': values}
-        range_ = f'{sheet_name}!A2'
-        sheet.values().append(spreadsheetId=spreadsheet_id, range=range_, valueInputOption='USER_ENTERED', body=body).execute()
-
-    print("Data updated in Google Sheets successfully.")
+            print(f"Error updating data for sheet '{sheet_name}' in spreadsheet '{spreadsheet_id}': {e}")
 
 if __name__ == "__main__":
     scrape_rubber_prices()
