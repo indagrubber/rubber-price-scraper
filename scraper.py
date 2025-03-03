@@ -81,11 +81,11 @@ def update_google_sheets(df):
             headers = ["Category", "Price (INR)", "Price (USD)", "Date"]
             new_data = category_df.values.tolist()
 
-            # Ensure headers are present
-            if not existing_data or existing_data[0] != headers:
-                combined_data = [headers] + new_data + existing_data[1:]
-            else:
+            # Ensure headers are present only once
+            if existing_data and existing_data[0] == headers:
                 combined_data = [existing_data[0]] + new_data + existing_data[1:]
+            else:
+                combined_data = [headers] + new_data + existing_data
 
             # Write combined data back to the sheet
             body = {'values': combined_data}
