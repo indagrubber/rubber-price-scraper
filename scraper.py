@@ -32,11 +32,14 @@ def get_sheets_service():
 def validate_price_data(price_str):
     """Convert price string to float and validate format"""
     try:
-        # Remove currency symbols and commas
-        clean_price = re.sub(r'[^\d.]', '', price_str)
+        # Handle market holiday indicators
+        if "(Market Holiday)" in str(price_str):
+            return 0.0
+        # Remove currency symbols, commas, and non-numeric characters
+        clean_price = re.sub(r'[^\d.]', '', str(price_str))
         return float(clean_price)
     except (ValueError, TypeError):
-        return None
+        return 0.0  # Return 0 for invalid data instead of None
 
 def scrape_rubber_prices():
     url = "https://rubberboard.gov.in/public"
@@ -48,36 +51,42 @@ def scrape_rubber_prices():
     soup = BeautifulSoup(response.content, "html.parser")
     tables = soup.find_all("table")
     
-    if len(tables) < 8:
-        print("Required tables not found on the webpage.")
+    # Identify valid price tables by their headers
+    target_tables = []
+    for idx, table in enumerate(tables):
+        headers = [th.text.strip() for th in table.find_all("th")]
+        if headers == ["Category", "₹", "US$"]:
+            target_tables.append((idx, table))
+
+    # Validate we found enough tables
+    if len(target_tables) < 2:
+        print(f"Found {len(target_tables)} price tables. Required: 2")
+        print(f"Table headers found: {[headers for _, headers in target_tables]}")
         return
 
-    # Data processing with validation
-    def process_table(table, expected_columns=3):
+    def process_price_table(table):
+        """Process any table with valid price data structure"""
         data = []
-        for row in table.find_all("tr")[1:]:
+        for row in table.find_all("tr")[1:]:  # Skip header row
             cols = [col.text.strip() for col in row.find_all("td")]
-            if len(cols) != expected_columns:
+            if len(cols) != 3:
                 print(f"Skipping invalid row: {cols}")
                 continue
-            
-            # Validate price columns
+                
+            category = cols[0]
             inr_price = validate_price_data(cols[1])
             usd_price = validate_price_data(cols[2])
             
-            if inr_price is None or usd_price is None:
-                print(f"Skipping row with invalid prices: {cols}")
-                continue
-                
-            data.append([cols[0], inr_price, usd_price])
-        return data
+            data.append([category, inr_price, usd_price])
+        
+        return pd.DataFrame(data, columns=["Category", "Price (INR)", "Price (USD)"])
 
-    # Process tables with validation
-    df_5 = pd.DataFrame(process_table(tables[4]), columns=["Category", "Price (INR)", "Price (USD)"])
-    df_8 = pd.DataFrame(process_table(tables[7]), columns=["Category", "Price (INR)", "Price (USD)"])
+    # Process first two valid tables
+    df_primary = process_price_table(target_tables[0][1])
+    df_secondary = process_price_table(target_tables[1][1])
 
     # Combine and add timestamp
-    df_combined = pd.concat([df_5, df_8], ignore_index=True)
+    df_combined = pd.concat([df_primary, df_secondary], ignore_index=True)
     df_combined["Date"] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S%z")
     
     update_google_sheets(df_combined)
@@ -115,15 +124,16 @@ def update_google_sheets(df):
                     body={'values': [headers]}
                 ).execute()
 
-            # Duplicate check
+            # Duplicate check with improved validation
             last_entries = sheet.values().get(
                 spreadsheetId=spreadsheet_id,
                 range=f'{sheet_name}!A2:D{DUPLICATE_CHECK_RANGE + 1}'
             ).execute().get('values', [])
 
             duplicate_found = any(
-                entry == new_data[0] for entry in last_entries
-                if len(entry) == 4  # Ensure complete entry
+                [str(item) for item in entry[:3]] == [str(item) for item in new_data[0][:3]]
+                for entry in last_entries
+                if len(entry) >= 3  # Check only first three columns
             )
 
             if duplicate_found:
