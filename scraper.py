@@ -103,8 +103,12 @@ def update_google_sheets(df):
         spreadsheet_id = config['spreadsheet_id']
         category = config['category']
         
+        # Debugging: Print categories in the DataFrame and what we're looking for
+        print(f"Categories in scraped data: {df['Category'].unique()}")
+        print(f"Looking for category: {category}")
+
         # Ensure category matching is case-insensitive and trims whitespace
-        category_df = df[df["Category"].str.strip().str.upper() == category.upper()]
+        category_df = df[df["Category"].str.strip().str.upper() == category.strip().upper()]
 
         if category_df.empty:
             print(f"No valid data found for category: {category}")
