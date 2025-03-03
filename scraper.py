@@ -90,30 +90,33 @@ def update_google_sheets(df):
         print(f"Processing sheet: {sheet_name}, Spreadsheet ID: {spreadsheet_id}")
 
         try:
-            # Fetch existing data from the sheet
-            result = sheet.values().get(
-                spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A1:D'
-            ).execute()
-            existing_data = result.get('values', [])
-
-            # Prepare headers and combine new and existing data
             headers = ["Category", "Price (INR)", "Price (USD)", "Date"]
             new_data = category_df.values.tolist()
 
-            # Ensure headers are present only once
-            if existing_data and existing_data[0] == headers:
-                combined_data = [existing_data[0]] + new_data + existing_data[1:]
-            else:
-                combined_data = [headers] + new_data + existing_data
-
-            # Write combined data back to the sheet
-            body = {'values': combined_data}
-            sheet.values().update(
+            # Check if headers exist
+            range_headers = f'{sheet_name}!A1:D1'
+            result = sheet.values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A1',
+                range=range_headers
+            ).execute()
+            existing_headers = result.get('values', [])
+
+            # Write headers if missing or mismatched
+            if not existing_headers or existing_headers[0] != headers:
+                sheet.values().update(
+                    spreadsheetId=spreadsheet_id,
+                    range=f'{sheet_name}!A1',
+                    valueInputOption='USER_ENTERED',
+                    body={'values': [headers]}
+                ).execute()
+
+            # Append new data to the first empty row
+            sheet.values().append(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!A:D',
                 valueInputOption='USER_ENTERED',
-                body=body
+                insertDataOption='INSERT_ROWS',
+                body={'values': new_data}
             ).execute()
 
         except Exception as e:
