@@ -2,8 +2,8 @@ name: Update Rubber Prices
 
 on:
   schedule:
-    - cron: "0 6 * * *" # Run daily at 6 AM UTC
-  workflow_dispatch: # Allow manual trigger
+    - cron: "0 6 * * *"  # 6 AM UTC = 11:30 AM IST
+  workflow_dispatch:
 
 jobs:
   update-prices:
@@ -11,12 +11,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # Updated from v3
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5  # Updated from v4
         with:
-          python-version: "3.9"
+          python-version: "3.10"  # Recommended bump from 3.9
+          cache: 'pip'  # Add caching for faster builds
 
       - name: Install dependencies
         run: |
@@ -26,5 +27,4 @@ jobs:
       - name: Run scraper script
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-        run: |
-          python scraper.py
+        run: python scraper.py
