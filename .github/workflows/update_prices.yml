@@ -2,7 +2,7 @@ name: Update Rubber Prices
 
 on:
   schedule:
-    - cron: "0 6 * * *"  # 6 AM UTC = 11:30 AM IST
+    - cron: "30 13 * * *"  # Run daily at 1:30 PM UTC (7:00 PM IST)
   workflow_dispatch:
 
 jobs:
@@ -11,13 +11,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4  # Updated from v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5  # Updated from v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.10"  # Recommended bump from 3.9
-          cache: 'pip'  # Add caching for faster builds
+          python-version: "3.10"
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
