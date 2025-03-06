@@ -75,10 +75,10 @@ def scrape_rubber_prices():
     print("Table 5 contents:")
     print(df_primary)
 
-    # Process Table 8 (SMR20 only)
-    df_secondary = process_price_table(tables[7])
+    # Process Table 9 (SMR20 only)
+    df_secondary = process_price_table(tables[8])
     df_secondary = df_secondary[df_secondary['Category'] == 'SMR20']
-    print("Table 8 contents:")
+    print("Table 9 contents:")
     print(df_secondary)
 
     # Combine and add timestamp
