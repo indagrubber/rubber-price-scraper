@@ -65,8 +65,8 @@ def scrape_rubber_prices():
     soup = BeautifulSoup(response.content, "html.parser")
     tables = soup.find_all("table")
     
-    if len(tables) < 8:
-        print(f"Not enough tables found. Total tables: {len(tables)}")
+    if len(tables) < 5:
+        print(f"Not enough tables found for primary processing. Total tables: {len(tables)}")
         return
 
     # Process Table 5 (RSS4 and ISNR20 only)
@@ -75,11 +75,23 @@ def scrape_rubber_prices():
     print("Table 5 contents:")
     print(df_primary)
 
-    # Process Table 9 (SMR20 only)
-    df_secondary = process_price_table(tables[8])
-    df_secondary = df_secondary[df_secondary['Category'] == 'SMR20']
-    print("Table 9 contents:")
-    print(df_secondary)
+    # Check for SMR20 in Table 9 first, then fallback to Table 8
+    df_secondary = pd.DataFrame(columns=["Category", "Price (INR)", "Price (USD)"])  # Initialize empty DataFrame
+    if len(tables) > 8:
+        df_secondary = process_price_table(tables[8])
+        df_secondary = df_secondary[df_secondary['Category'] == 'SMR20']
+        if not df_secondary.empty:
+            print("SMR20 found in Table 9.")
+        else:
+            print("SMR20 not found in Table 9. Checking Table 8...")
+    
+    if df_secondary.empty and len(tables) > 7:  # Fallback to Table 8
+        df_secondary = process_price_table(tables[7])
+        df_secondary = df_secondary[df_secondary['Category'] == 'SMR20']
+        if not df_secondary.empty:
+            print("SMR20 found in Table 8.")
+        else:
+            print("SMR20 not found in Table 8 either.")
 
     # Combine and add timestamp
     df_combined = pd.concat([df_primary, df_secondary], ignore_index=True)
