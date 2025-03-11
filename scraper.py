@@ -8,16 +8,17 @@ import json
 import os
 import re
 from pytz import timezone
+import time
 
 # Constants
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 IST = timezone('Asia/Kolkata')
 
+# Updated SHEET_CONFIG (removed RSS5)
 SHEET_CONFIG = {
     'SMR20': {'spreadsheet_id': '1hHh1FMholQvVdxFJIY67Yvo5B-8hTfuILvr0BWhp8i4', 'category': 'SMR20'},
     'ISNR20': {'spreadsheet_id': '1xL9wPZGUJoCqwtNlcqZAvQLUyXuASGg_FRyr_d1wKxE', 'category': 'ISNR20'},
-    'RSS4': {'spreadsheet_id': '16L7Vz7oJMiamKbg4g-LkQ64wZdXlmNEMOO24MZhC0Bs', 'category': 'RSS4'},
-    'RSS5': {'spreadsheet_id': '1OU3IaW5WHPja03CPQ2VjmTmGMA-YyPLPAyAIrwKqc8g', 'category': 'RSS5'}
+    'RSS4': {'spreadsheet_id': '16L7Vz7oJMiamKbg4g-LkQ64wZdXlmNEMOO24MZhC0Bs', 'category': 'RSS4'}
 }
 
 def get_sheets_service():
@@ -26,7 +27,13 @@ def get_sheets_service():
         raise ValueError("GOOGLE_CREDENTIALS environment variable not set.")
     
     creds_dict = json.loads(creds_json)
-    return build('sheets', 'v4', credentials=service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES))
+    credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    
+    # Increase timeout for Google Sheets API requests
+    from google.auth.transport.requests import Request
+    http = Request(timeout=60)  # Set timeout to 60 seconds
+    
+    return build('sheets', 'v4', credentials=credentials, requestBuilder=lambda *args, **kwargs: http)
 
 def validate_price_data(price_str):
     """Convert price string to float and validate format"""
@@ -57,11 +64,23 @@ def process_price_table(table):
 
 def scrape_rubber_prices():
     url = "https://rubberboard.gov.in/public"
-    response = requests.get(url)
-    if response.status_code != 200:
-        print(f"Failed to fetch data. HTTP Status Code: {response.status_code}")
-        return
-
+    
+    # Add retries for HTTP request
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=10)  # Increase timeout to 10 seconds
+            if response.status_code == 200:
+                break  # Exit loop if successful
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff
+                print(f"Request failed: {e}. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                print("Failed to fetch data after multiple retries.")
+                return
+    
     soup = BeautifulSoup(response.content, "html.parser")
     tables = soup.find_all("table")
     
@@ -104,6 +123,19 @@ def scrape_rubber_prices():
     
     update_google_sheets(df_combined)
 
+def retry_with_backoff(func, retries=5, backoff_factor=2):
+    """Retry a function with exponential backoff"""
+    for attempt in range(retries):
+        try:
+            return func()
+        except Exception as e:
+            if attempt < retries - 1:
+                wait_time = backoff_factor ** attempt
+                print(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                raise e
+
 def update_google_sheets(df):
     service = get_sheets_service()
     sheet = service.spreadsheets()
@@ -125,10 +157,11 @@ def update_google_sheets(df):
             headers = ["Category", "Price (INR)", "Price (USD)", "Date"]
             new_data = category_df.values.tolist()
 
-            existing_data_result = sheet.values().get(
+            existing_data_result = retry_with_backoff(lambda: sheet.values().get(
                 spreadsheetId=spreadsheet_id,
                 range=f'{sheet_name}!A2:D'
-            ).execute()
+            ).execute())
+            
             existing_data = existing_data_result.get('values', [])
 
             new_data_filtered = [
@@ -141,26 +174,29 @@ def update_google_sheets(df):
                 continue
 
             header_range = f'{sheet_name}!A1:D1'
-            existing_headers = sheet.values().get(
+            existing_headers_result = retry_with_backoff(lambda: sheet.values().get(
                 spreadsheetId=spreadsheet_id,
                 range=header_range
-            ).execute().get('values', [])
+            ).execute())
+            
+            existing_headers = existing_headers_result.get('values', [])
 
             if not existing_headers or existing_headers[0] != headers:
-                sheet.values().update(
+                retry_with_backoff(lambda: sheet.values().update(
                     spreadsheetId=spreadsheet_id,
                     range=header_range,
                     valueInputOption='USER_ENTERED',
                     body={'values': [headers]}
-                ).execute()
+                ).execute())
 
-            sheet.values().append(
+            retry_with_backoff(lambda: sheet.values().append(
                 spreadsheetId=spreadsheet_id,
                 range=f'{sheet_name}!A:D',
                 valueInputOption='USER_ENTERED',
                 insertDataOption='INSERT_ROWS',
                 body={'values': new_data_filtered}
-            ).execute()
+            ).execute())
+            
             print(f"Successfully updated {category} with {len(new_data_filtered)} new rows.")
 
         except Exception as e:
