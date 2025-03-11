@@ -9,6 +9,7 @@ import os
 import re
 from pytz import timezone
 import time
+import httplib2  # Import httplib2 for custom timeout
 
 # Constants
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -29,11 +30,13 @@ def get_sheets_service():
     creds_dict = json.loads(creds_json)
     credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     
-    # Increase timeout for Google Sheets API requests
-    from google.auth.transport.requests import Request
-    http = Request(timeout=60)  # Set timeout to 60 seconds
+    # Create an httplib2.Http object with a timeout
+    http = httplib2.Http(timeout=60)  # Set timeout to 60 seconds
     
-    return build('sheets', 'v4', credentials=credentials, requestBuilder=lambda *args, **kwargs: http)
+    # Authorize the HTTP object with credentials
+    authorized_http = credentials.authorize(http)
+    
+    return build('sheets', 'v4', http=authorized_http)
 
 def validate_price_data(price_str):
     """Convert price string to float and validate format"""
