@@ -14,7 +14,6 @@ import httplib2  # Import httplib2 for timeout handling
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 IST = timezone('Asia/Kolkata')
 
-# Updated SHEET_CONFIG (removed RSS5)
 SHEET_CONFIG = {
     'SMR20': {'spreadsheet_id': '1hHh1FMholQvVdxFJIY67Yvo5B-8hTfuILvr0BWhp8i4', 'category': 'SMR20'},
     'ISNR20': {'spreadsheet_id': '1xL9wPZGUJoCqwtNlcqZAvQLUyXuASGg_FRyr_d1wKxE', 'category': 'ISNR20'},
@@ -32,10 +31,8 @@ def get_sheets_service():
     # Create an httplib2.Http object with a timeout
     http = httplib2.Http(timeout=60)  # Set timeout to 60 seconds
     
-    # Authorize the HTTP object with credentials for API calls
-    authorized_http = credentials.authorize(http)
-    
-    return build('sheets', 'v4', http=authorized_http)
+    # Build the Google Sheets API client using credentials and custom HTTP object
+    return build('sheets', 'v4', credentials=credentials, http=http)
 
 def validate_price_data(price_str):
     """Convert price string to float and validate format"""
