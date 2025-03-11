@@ -8,7 +8,7 @@ import json
 import os
 import re
 from pytz import timezone
-import google.auth.transport.requests  # Import transport requests for timeout handling
+import httplib2  # Import httplib2 for timeout handling
 
 # Constants
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -29,10 +29,13 @@ def get_sheets_service():
     creds_dict = json.loads(creds_json)
     credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     
-    # Create a transport request with a timeout for API calls
-    request = google.auth.transport.requests.Request(timeout=60)  # Set timeout to 60 seconds
+    # Create an httplib2.Http object with a timeout
+    http = httplib2.Http(timeout=60)  # Set timeout to 60 seconds
     
-    return build('sheets', 'v4', credentials=credentials, requestBuilder=lambda *args, **kwargs: request)
+    # Authorize the HTTP object with credentials for API calls
+    authorized_http = credentials.authorize(http)
+    
+    return build('sheets', 'v4', http=authorized_http)
 
 def validate_price_data(price_str):
     """Convert price string to float and validate format"""
