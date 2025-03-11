@@ -8,7 +8,6 @@ import json
 import os
 import re
 from pytz import timezone
-import httplib2  # Import httplib2 for timeout handling
 
 # Constants
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -28,11 +27,8 @@ def get_sheets_service():
     creds_dict = json.loads(creds_json)
     credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     
-    # Create an httplib2.Http object with a timeout
-    http = httplib2.Http(timeout=60)  # Set timeout to 60 seconds
-    
-    # Build the Google Sheets API client using credentials and custom HTTP object
-    return build('sheets', 'v4', credentials=credentials, http=http)
+    # Build the Google Sheets API client using credentials only
+    return build('sheets', 'v4', credentials=credentials)
 
 def validate_price_data(price_str):
     """Convert price string to float and validate format"""
@@ -128,7 +124,7 @@ def retry_with_backoff(func, retries=5, backoff_factor=2):
         try:
             return func()
         except Exception as e:
-            if attempt < retries - 1:
+            if attempt < max_retries - 1:
                 wait_time = backoff_factor ** attempt
                 print(f"Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
