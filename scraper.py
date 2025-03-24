@@ -7,6 +7,7 @@ from googleapiclient.discovery import build
 import json
 import os
 import re
+import time  # Added missing import
 from pytz import timezone
 
 # Constants
@@ -64,7 +65,10 @@ def scrape_rubber_prices():
     max_retries = 5
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, timeout=10)  # Increase timeout to 10 seconds
+            headers = {
+                'User-Agent': 'RubberPriceScraper/1.0 (github-actions@example.com)'
+            }
+            response = requests.get(url, headers=headers, timeout=10)  # Added user-agent header
             if response.status_code == 200:
                 break  # Exit loop if successful
         except requests.exceptions.RequestException as e:
@@ -120,11 +124,11 @@ def scrape_rubber_prices():
 
 def retry_with_backoff(func, retries=5, backoff_factor=2):
     """Retry a function with exponential backoff"""
-    for attempt in range(retries):
+    for attempt in range(retries):  # Fixed: using retries parameter
         try:
             return func()
         except Exception as e:
-            if attempt < max_retries - 1:
+            if attempt < retries - 1:  # Fixed: using retries parameter
                 wait_time = backoff_factor ** attempt
                 print(f"Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
