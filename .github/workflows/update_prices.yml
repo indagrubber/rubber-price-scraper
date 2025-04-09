@@ -2,7 +2,7 @@ name: Update Rubber Prices
 
 on:
   schedule:
-    - cron: "45 12 * * *"  # Run daily at 12:45 PM UTC (5:45 PM IST)
+    - cron: "30 11 * * *"  # Run daily at 12:45 PM UTC (4:30 PM IST)
   workflow_dispatch:
 
 jobs:
