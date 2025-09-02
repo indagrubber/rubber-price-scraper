@@ -49,7 +49,7 @@ def process_price_table(table):
     return pd.DataFrame(data, columns=["Category", "Price (INR)", "Price (USD)"])
 
 def find_category_table(soup, category):
-    """Search all tables for the category, and return the DataFrame if found."""
+    """Search all tables dynamically for RSS4 and ISNR20 category"""
     for table in soup.find_all("table"):
         df = process_price_table(table)
         if not df.empty and category in df['Category'].values:
@@ -79,18 +79,34 @@ def scrape_rubber_prices():
                 return
 
     soup = BeautifulSoup(response.content, "html.parser")
-
-    # Try to find each category dynamically
-    all_dfs = []
-    for category in SHEET_CONFIG.keys():
-        df_cat = find_category_table(soup, category)
-        if not df_cat.empty:
-            all_dfs.append(df_cat)
-    if not all_dfs:
-        print("No valid data found for any category.")
+    tables = soup.find_all("table")
+    if len(tables) < 5:
+        print(f"Not enough tables found for processing. Total tables: {len(tables)}")
         return
 
-    df_combined = pd.concat(all_dfs, ignore_index=True)
+    # Dynamic search for RSS4 and ISNR20
+    df_rss4 = find_category_table(soup, 'RSS4')
+    df_isnr20 = find_category_table(soup, 'ISNR20')
+
+    # Use original logic for SMR20 from Table 9 then Table 8
+    df_smr20 = pd.DataFrame(columns=["Category", "Price (INR)", "Price (USD)"])
+    if len(tables) > 8:
+        df_tmp = process_price_table(tables[8])
+        df_smr20 = df_tmp[df_tmp['Category'] == 'SMR20']
+        if not df_smr20.empty:
+            print("SMR20 found in Table 9.")
+        else:
+            print("SMR20 not found in Table 9. Checking Table 8...")
+    if df_smr20.empty and len(tables) > 7:
+        df_tmp = process_price_table(tables[7])
+        df_smr20 = df_tmp[df_tmp['Category'] == 'SMR20']
+        if df_smr20.empty:
+            print("SMR20 not found in Table 8 either.")
+        else:
+            print("SMR20 found in Table 8.")
+
+    # Combine all dataframes and drop duplicates
+    df_combined = pd.concat([df_rss4, df_isnr20, df_smr20], ignore_index=True)
     df_combined = df_combined.drop_duplicates()
     df_combined["Date"] = datetime.now(IST).strftime("%m/%d/%Y")
 
@@ -125,19 +141,19 @@ def update_google_sheets(df):
         try:
             headers = ["Category", "Price (INR)", "Price (USD)", "Date"]
             new_data = category_df.values.tolist()
+
             existing_data_result = retry_with_backoff(lambda: sheet.values().get(
                 spreadsheetId=spreadsheet_id,
                 range=f'{sheet_name}!A2:D'
             ).execute())
 
             existing_data = existing_data_result.get('values', [])
-            new_data_filtered = [
-                row for row in new_data 
-                if row not in existing_data
-            ]
+            new_data_filtered = [row for row in new_data if row not in existing_data]
+
             if not new_data_filtered:
                 print(f"No new rows to append for {category}. Data already exists.")
                 continue
+
             header_range = f'{sheet_name}!A1:D1'
             existing_headers_result = retry_with_backoff(lambda: sheet.values().get(
                 spreadsheetId=spreadsheet_id,
@@ -152,6 +168,7 @@ def update_google_sheets(df):
                     valueInputOption='USER_ENTERED',
                     body={'values': [headers]}
                 ).execute())
+
             retry_with_backoff(lambda: sheet.values().append(
                 spreadsheetId=spreadsheet_id,
                 range=f'{sheet_name}!A:D',
