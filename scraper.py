@@ -27,35 +27,46 @@ def get_sheets_service():
     credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     return build('sheets', 'v4', credentials=credentials)
 
-def validate_price_data(price_str):
+def validate_price_data(price_str, category=None):
     try:
         if "(Market Holiday)" in str(price_str):
             return 0.0
         clean_price = re.sub(r'[^\d.]', '', str(price_str))
-        return float(clean_price)
-    except (ValueError, TypeError):
+
+        # Debug: Print original and cleaned price for SMR20 if parsing yields 0.0
+        if category == 'SMR20' and (not clean_price or clean_price == '0'):
+            print(f"Warning: SMR20 price parsing issue. Original: '{price_str}' Cleaned: '{clean_price}'")
+
+        return float(clean_price) if clean_price else 0.0
+    except (ValueError, TypeError) as e:
+        print(f"Error parsing price for category {category}: {price_str} - {e}")
         return 0.0
 
-def process_price_table(table):
+def process_price_table(table, category_filter=None):
     data = []
     for row in table.find_all("tr")[1:]:
         cols = [col.get_text(strip=True) for col in row.find_all("td")]
         if len(cols) != 3:
             continue
         category = cols[0].strip()
-        inr_price = validate_price_data(cols[1])
-        usd_price = validate_price_data(cols[2])
+        if category_filter and category != category_filter:
+            continue
+        inr_price = validate_price_data(cols[1], category)
+        usd_price = validate_price_data(cols[2], category)
         data.append([category, inr_price, usd_price])
     return pd.DataFrame(data, columns=["Category", "Price (INR)", "Price (USD)"])
 
 def find_category_table(soup, category):
-    """Search all tables dynamically for RSS4 and ISNR20 category"""
+    """Search all tables dynamically for specified category except SMR20"""
+    if category == 'SMR20':
+        # For SMR20, return empty dataframe here to force original logic use
+        return pd.DataFrame(columns=["Category", "Price (INR)", "Price (USD)"])
     for table in soup.find_all("table"):
-        df = process_price_table(table)
-        if not df.empty and category in df['Category'].values:
-            print(f"Found '{category}' in one of the tables.")
-            return df[df["Category"] == category]
-    print(f"Could not find '{category}' in any table.")
+        df = process_price_table(table, category_filter=category)
+        if not df.empty:
+            print(f"Found '{category}' in one of the tables dynamically.")
+            return df
+    print(f"Could not find '{category}' in any table dynamically.")
     return pd.DataFrame(columns=["Category", "Price (INR)", "Price (USD)"])
 
 def scrape_rubber_prices():
@@ -84,28 +95,28 @@ def scrape_rubber_prices():
         print(f"Not enough tables found for processing. Total tables: {len(tables)}")
         return
 
-    # Dynamic search for RSS4 and ISNR20
+    # Dynamic search for RSS4 and ISNR20 (excluding SMR20 here)
     df_rss4 = find_category_table(soup, 'RSS4')
     df_isnr20 = find_category_table(soup, 'ISNR20')
 
-    # Use original logic for SMR20 from Table 9 then Table 8
+    # Original SMR20 logic: search only Table 9 then Table 8 for SMR20
     df_smr20 = pd.DataFrame(columns=["Category", "Price (INR)", "Price (USD)"])
     if len(tables) > 8:
-        df_tmp = process_price_table(tables[8])
-        df_smr20 = df_tmp[df_tmp['Category'] == 'SMR20']
-        if not df_smr20.empty:
+        df_tmp = process_price_table(tables[8], category_filter='SMR20')
+        if not df_tmp.empty:
+            df_smr20 = df_tmp
             print("SMR20 found in Table 9.")
         else:
             print("SMR20 not found in Table 9. Checking Table 8...")
     if df_smr20.empty and len(tables) > 7:
-        df_tmp = process_price_table(tables[7])
-        df_smr20 = df_tmp[df_tmp['Category'] == 'SMR20']
-        if df_smr20.empty:
-            print("SMR20 not found in Table 8 either.")
-        else:
+        df_tmp = process_price_table(tables[7], category_filter='SMR20')
+        if not df_tmp.empty:
+            df_smr20 = df_tmp
             print("SMR20 found in Table 8.")
+        else:
+            print("SMR20 not found in Table 8 either.")
 
-    # Combine all dataframes and drop duplicates
+    # Combine all dataframes
     df_combined = pd.concat([df_rss4, df_isnr20, df_smr20], ignore_index=True)
     df_combined = df_combined.drop_duplicates()
     df_combined["Date"] = datetime.now(IST).strftime("%m/%d/%Y")
